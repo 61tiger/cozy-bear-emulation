@@ -1,4 +1,4 @@
-# cozy-bear-emulation
+# cozy-bear/APT29-emulation
 emualting apt29 tactics and customizing them for evasion against elastic edr + windows 11 defender
 
 # cozy-bear-emulation
