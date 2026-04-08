@@ -147,6 +147,6 @@ from FireEye/Mandiant, Microsoft, CrowdStrike, and government advisories.
 
 ## Author
 
-**regulus** — Purdue University, BS Cybersecurity  
-Founder, DiTM Security | 2x CVE | CRTO, CRTL  
+**61tiger** — Purdue University, BS Cybersecurity  
+Founder, DiTM Security | CRTO, CRTL, MalDev Phishing Ops  
 [LinkedIn](https://linkedin.com/in/aryan-cybersecurity)
