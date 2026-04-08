@@ -11,13 +11,12 @@ emualting apt29 tactics and customizing them for evasion against elastic edr + w
 
 This repository documents a complete two-phase APT29 adversary emulation executed 
 against a controlled Active Directory lab environment. Every technique is attributed 
-to a real, publicly documented APT29 campaign — no MITRE evaluation scenarios, no 
-simulations.
+to a real, publicly documented APT29 campaign but customized to evade modern defenses. 
 
 The emulation uses Havoc C2 with a custom profile mimicking NOBELIUM HTTP traffic 
 patterns, and targets zero detections across both Elastic EDR and Windows Defender.
 
-**Fake target organization:** Meridian Analytics Group — a fictional DC-based policy 
+**Fake target organization:** PolarWinds — a fictional DC-based policy 
 research firm, the type of organization SVR routinely targets.
 
 ---
@@ -28,10 +27,9 @@ research firm, the type of organization SVR routinely targets.
 |-----------|---------|
 | Attacker | Kali Linux (WSL2) |
 | C2 Framework | Havoc — custom APT29 C2 profile |
-| Domain Controller | Windows Server 2019 — meridian.local |
+| Domain Controller | Windows Server 2019 — polar.local |
 | Victim Workstation | Windows 11 Enterprise |
 | EDR | Elastic Security Cloud + Windows Defender |
-| User | j.harrison@meridian.local |
 
 ---
 
