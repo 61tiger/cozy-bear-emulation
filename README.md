@@ -1,8 +1,6 @@
 # cozy-bear/APT29-emulation
 emualting apt29 tactics and customizing them for evasion against elastic edr + windows 11 defender
 
-# cozy-bear-emulation
-
 > Full adversary emulation of APT29 (Cozy Bear / NOBELIUM / Midnight Blizzard) 
 > across a live Active Directory environment. Zero Elastic EDR + Windows Defender 
 > detections as the operational goal.
