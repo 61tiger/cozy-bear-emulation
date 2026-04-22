@@ -74,8 +74,8 @@ Every phase cites the specific report where APT29 was documented using this tech
 
 EnvyScout HTML smuggler delivered via spearphishing. The HTML file contains a 
 XOR-encoded ISO file decoded and auto-downloaded by JavaScript using FileSaver.js. 
-ISO mounts automatically on Windows 10+. ISO contains an LNK file executing a 
-PowerShell stager that establishes the Havoc beacon.
+ISO mounts automatically on Windows 10+. ISO contains an LNK file executing a compiled binary stager that establishes the Havoc beacon.
+Note: PowerShell CLM is enforced on VICTIM01 — PS-based stagers are not viable against the target environment.
 
 MSTIC documented this exact delivery chain — NV.html, FileSaver.js, ISO delivery, 
 LNK execution — used by NOBELIUM in May 2021 campaigns targeting diplomatic entities.
@@ -265,18 +265,16 @@ after operational objectives met.
 
 ## Evasion Stack
 
-Built on Crystal Palace primitives ported to Havoc. All implemented as position-independent 
-code compiled with mingw-w64.
+Built using publicly documented open source research, ported to Havoc. All implemented as position-independent code compiled with mingw-w64
 
-| Component | Implementation | Detection Defeated |
-|-----------|---------------|-------------------|
-| Sleep masking | Hook Sleep → XOR encrypt all PE sections → RX→RW during sleep → restore on wake. Random 128-byte key per payload | Elastic memory scanner |
-| Indirect syscalls | RecycledGate — Hell's/Halo's/Tartarus' Gate SSN resolution. Syscall executed from NTDLL .text section | NTDLL userland hooks |
-| Call stack spoofing | Draugr — fake BaseThreadInitThunk+0x17 and RtlUserThreadStart+0x2c frames. Gadget from dfshim.dll with preceding call instruction | ETW-TI call stack analysis |
-| Static signature removal | XOR-masked DLL delivery, Havoc string replacement | YARA / static AV |
-| RWX elimination | Allocate RW, fix permissions per PE section characteristics | RWX memory alerts |
-| Memory cleanup | Hook ExitThread → timer queue → NtContinue → VirtualFree. CFG bypass via NtSetInformationVirtualMemory | Post-execution forensics |
-
+| Component | Implementation | Detection Defeated | Source |
+|-----------|---------------|-------------------|----|
+| Sleep masking | Hook Sleep → XOR encrypt all PE sections → RX→RW during sleep → restore on wake. Random 128-byte key per payload | Elastic memory scanner | C5pider — [Ekko](https://github.com/Cracked5pider/Ekko) |
+| Indirect syscalls | RecycledGate — Hell's/Halo's/Tartarus' Gate SSN resolution. Syscall executed from NTDLL .text section | NTDLL userland hooks | thefLink — [RecycledGate](https://github.com/thefLink/RecycledGate) |
+| Call stack spoofing | Draugr — fake BaseThreadInitThunk+0x17 and RtlUserThreadStart+0x2c frames. Gadget from dfshim.dll with preceding call instruction | ETW-TI call stack analysis | mgeeky — [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) + WithSecure research |
+| Static signature removal | XOR-masked DLL delivery, Havoc string replacement | YARA / static AV | Public — [Havoc Binary block](https://github.com/HavocFramework/Havoc/blob/main/WIKI.MD) |
+| RWX elimination | Allocate RW, fix permissions per PE section characteristics | RWX memory alerts | Standard PE loader — Windows Internals |
+| Memory cleanup | Hook ExitThread → timer queue → NtContinue → VirtualFree. CFG bypass via NtSetInformationVirtualMemory | Post-execution forensics | Public NT internals documentation |
 ---
 
 ## Primary Sources
@@ -314,6 +312,20 @@ Do not use against systems you do not own or have explicit written authorization
 Techniques are attributed to APT29 based on publicly available threat intelligence 
 from FireEye/Mandiant, Microsoft Threat Intelligence Center, CrowdStrike, and 
 government advisories (NCSC, CISA, NSA).
+
+---
+
+## Status
+
+| Component | Status |
+|-----------|--------|
+| Lab environment | ✅ Complete |
+| Havoc C2 profile (apt29.yaotl) | ✅ Complete |
+| EnvyScout HTML smuggler | ✅ Complete |
+| Custom loader (sleep mask + indirect syscalls + call stack spoof) | 🔴 In progress |
+| POSHSPY C2 proxy | 🔴 In progress |
+| Full kill chain execution | 🔴 Pending loader completion |
+| Detection results table | 🔴 Pending engagement execution |
 
 ---
 
