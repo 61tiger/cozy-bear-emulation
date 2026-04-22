@@ -12,8 +12,7 @@ This repository documents a complete APT29 adversary emulation executed against 
 controlled Active Directory lab environment with modern enterprise defenses enabled.
 
 Every technique in the kill chain is directly attributed to a named, publicly 
-documented APT29 campaign report — not to MITRE ATT&CK mappings alone. Where 
-MITRE is the only available attribution, this is explicitly noted.
+documented APT29 campaign reports. Where MITRE is the only available attribution, this is explicitly noted.
 
 The emulation advances documented APT29 tradecraft to account for 2026 defensive 
 capabilities — specifically Elastic Security 9.3 in full block/prevent mode, 
