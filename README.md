@@ -12,24 +12,27 @@ This repository documents a complete APT29 adversary emulation executed against 
 controlled Active Directory lab environment with modern enterprise defenses enabled.
 
 Every technique in the kill chain is directly attributed to a named, publicly 
-documented APT29 campaign report. Where MITRE is the only available attribution, 
-this is explicitly noted.
+documented APT29 campaign reports. Where MITRE is the only available attribution, this is explicitly noted.
 
 The emulation advances documented APT29 tradecraft to account for 2026 defensive 
-capabilities — specifically Elastic Security 9.3 in full block/prevent mode,
+capabilities — specifically Elastic Security 9.3 in full block/prevent mode, 
 Windows Defender with ASR rules, LSA Protection, PowerShell Constrained Language 
 Mode, and AES-only Kerberos with NTLM disabled.
-
-**No commercial post-ex frameworks used.** Every component is built from 
-open source research and primary source attribution.
 
 **Fictional target organization:** PolarWinds — a DC-based policy research firm.
 SVR's documented targeting pattern includes think tanks, diplomatic entities, and 
 policy organizations of exactly this type.
 
+**No commercial post-ex frameworks used.** Crystal Palace, Cobalt Strike plugins, and 
+commercial tooling are explicitly excluded. Every component is built from open source 
+research with full primary source attribution.
+
 ---
 
 ## Defensive Environment
+
+This emulation runs against hardened infrastructure — not a default lab. 
+Defenses active during the engagement:
 
 | Defense | Configuration |
 |---------|--------------|
@@ -37,7 +40,7 @@ policy organizations of exactly this type.
 | Windows Defender | Real-time protection + all ASR rules enabled |
 | LSA Protection | RunAsPPL enabled — standard Mimikatz fails |
 | WDigest | Disabled — no cleartext credentials in LSASS |
-| PowerShell CLM | Constrained Language Mode enforced |
+| PowerShell CLM | Constrained Language Mode enforced via environment variable |
 | AppLocker | Script rules enforced — Windows/ProgramFiles paths only |
 | NTLM | Disabled domain-wide — Kerberos only |
 | Kerberos | AES-256/AES-128 only — RC4 disabled |
@@ -45,7 +48,7 @@ policy organizations of exactly this type.
 | Protected Users | Domain admins in Protected Users security group |
 | Fine-grained Password Policy | 16 char min, complexity, lockout after 5 attempts |
 | Windows Firewall | Enabled on all profiles |
-| Audit Logging | Full audit policy |
+| Audit Logging | Full audit policy — process creation, logon, DS access, credential validation |
 | PowerShell Logging | Script block + module logging enabled |
 
 ---
@@ -62,200 +65,174 @@ policy organizations of exactly this type.
 
 ---
 
-## Loader Architecture
-
-Custom loader built from scratch in C. No commercial frameworks.
-Every evasion technique sourced from public open source research.
-
-### Loader Evasion Stack
-
-| Component | Implementation | Detection Defeated | Source |
-|-----------|---------------|-------------------|--------|
-| Indirect syscalls | RecycledGate — Hell's/Halo's Gate SSN resolution. Syscall executed from ntdll .text | NTDLL userland hooks | thefLink — [RecycledGate](https://github.com/thefLink/RecycledGate) |
-| Sleep masking | Hook Sleep → encrypt all PE sections → RX→RW during sleep → restore on wake | Elastic memory scanner | C5pider — [Ekko](https://github.com/Cracked5pider/Ekko) |
-| Call stack spoofing | Draugr — fake BaseThreadInitThunk+0x17 and RtlUserThreadStart+0x2c frames | ETW-TI call stack analysis | mgeeky — [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) |
-| RWX elimination | Allocate RW, copy, decrypt, flip RX — never RWX | RWX memory alerts | Standard |
-| Memory self-destruction | SecureZeroMemory on shellcode + loader image on exit | Memory forensics | FireEye SUNBURST [9] |
-
-### APT29 Behavioral Checks
-
-All behavioral checks implemented in loader before execution.
-Loader silently terminates + zeroes memory if any check fails.
-
-| Check | Behavior | Attribution |
-|-------|----------|-------------|
-| MAC address blocklist | Terminate if sandbox MAC detected (VMware/VBox prefixes) | MSTIC GoldMax [10] |
-| Domain allowlist | Only execute if joined to `polar.local` | FireEye SUNBURST [9] |
-| Domain blocklist | Terminate if security vendor domain detected | FireEye SUNBURST [9] |
-| Activation delay | 24 hour delay before first execution | FireEye SUNBURST [9] |
-| Working hours | Only execute weekdays 09:00-18:00 UTC+3 (Moscow hours) | MSTIC GoldMax [10] |
-| Decoy traffic | 1-4 WinHTTP GET requests to legitimate domains before beacon | MSTIC GoldMax [10] |
-
-### Memory Self-Destruction
-
-If any behavioral check fails, or on clean exit:
-
-```c
-/* zero shellcode */
-SecureZeroMemory(buf, shellcode_len);
-NtFreeVirtualMemory(...);
-
-/* zero loader image — memory forensics finds nothing */
-BYTE *image_base = get_own_base();
-SecureZeroMemory(image_base, image_size);
-```
-
-Attributed to SUNBURST [9] — FireEye documented APT29 cleaning its own memory on termination.
-
----
-
-## Sandbox Evasion Validation
-
-Loader submitted to public sandboxes to document behavioral check effectiveness.
-
-| Sandbox | Result | Triggered By | Evidence |
-|---------|--------|-------------|---------|
-| any.run | 🔴 Pending | | |
-| hybrid-analysis | 🔴 Pending | | |
-| Joe Sandbox | 🔴 Pending | | |
-
-*To be populated after loader completion.*
-
----
-
 ## Kill Chain — Primary Source Attribution
+
+Every phase cites the specific report where APT29 was documented using this technique.
+
+---
 
 ### Phase 1 — Initial Access
 **Techniques:** T1566.001, T1027.006  
-**Primary Source:** MSTIC — *NOBELIUM EnvyScout* (May 2021) [18][19]
+**Primary Source:** MSTIC — *New sophisticated email-based attack from NOBELIUM* (May 2021) [18] and *Breaking down NOBELIUM's latest early-stage toolset* (May 2021) [19]
 
-EnvyScout HTML smuggler delivered via spearphishing. XOR-encoded ISO decoded and 
-auto-downloaded by JavaScript. ISO contains LNK executing compiled binary stager.
-PowerShell CLM enforced on VICTIM01 — PS-based stagers not viable.
+EnvyScout HTML smuggler delivered via spearphishing. The HTML file contains a 
+XOR-encoded ISO file decoded and auto-downloaded by JavaScript using FileSaver.js. 
+ISO mounts automatically on Windows 10+. ISO contains an LNK file executing a compiled binary stager that establishes the Havoc beacon.
+Note: PowerShell CLM is enforced on VICTIM01 — PS-based stagers are not viable against the target environment.
+
+MSTIC documented this exact delivery chain — NV.html, FileSaver.js, ISO delivery, 
+LNK execution — used by NOBELIUM in May 2021 campaigns targeting diplomatic entities.
+
+Additional documented NOBELIUM behaviors implemented:
+- Web bug for victim tracking
+- C: drive check to avoid sandbox execution
+- iOS user-agent redirect to benign content
+- NTLMv2 capture via file:// URI
+
+---
 
 ### Phase 2 — C2 Establishment
 **Technique:** T1071.001  
-**Primary Sources:** FireEye SUNBURST [9], MSTIC GoldMax [10]
+**Primary Sources:** FireEye — *SUNBURST Backdoor Analysis* (December 2020) [9][9b], MSTIC — *GoldMax, GoldFinder, and Sibot* (March 2021) [10]
 
-Custom Havoc C2 profile:
-- Sleep: 30-60 minutes, 25% jitter
-- Active hours: weekdays 09:00-18:00 UTC+3
-- Activation delay: 24 hours
-- Decoy traffic mixed with real C2
-- Anti-sandbox MAC check
-- Content-Type: application/json tasking, application/octet-stream exfil
+Custom Havoc C2 profile implementing documented NOBELIUM behavioral parameters:
+- **Sleep:** 30-60 minutes with 25% jitter
+- **Active hours:** Weekdays only, 09:00-18:00 UTC+3 (Moscow business hours)
+- **Activation delay:** 24 hours before first beacon (SUNBURST: 12-14 days)
+- **Decoy traffic:** Legitimate-looking requests mixed with real C2 (GoldMax documented)
+- **Anti-sandbox:** MAC address check — terminates on c8:27:cc:c2:37:5a (GoldMax documented)
+- **Content-Type:** application/json for tasking, application/octet-stream for exfil (SUNBURST documented)
+- **URIs:** Mimic PolarWinds internal service endpoints
+
+---
 
 ### Phase 3 — Discovery
 **Techniques:** T1087.002, T1057, T1082, T1016  
-**Primary Sources:** MSTIC Solorigate [37], Mandiant [62]
+**Primary Sources:** MSTIC — *Solorigate deep dive* (January 2021) [37], Mandiant — *Tracking APT29 Phishing Campaigns* (April 2022) [62]
 
-PowerShell LOTL discovery. No binaries on disk. Native cmdlets + LDAP queries.
+PowerShell living-off-the-land discovery. MSTIC documented exact commands used 
+post-SolarWinds compromise. Mandiant documented atypical LDAP queries including 
+msPKI-CredentialRoamingTokens attribute queries against AD.
+
+No binaries touch disk. All discovery via native PowerShell cmdlets and LDAP queries.
+
+---
 
 ### Phase 4 — UAC Bypass
 **Technique:** T1548.002  
-**Attribution:** MITRE G0016 (no primary source documents specific method)
+**Attribution:** MITRE ATT&CK G0016 (technique attributed, specific method not documented in primary source reports)
 
-fodhelper.exe registry hijack — medium to high integrity.
+fodhelper.exe registry hijack to elevate from medium to high integrity. T1548.002 
+is mapped to APT29 in MITRE G0016. No primary source report documents APT29's 
+specific UAC bypass implementation — this is noted explicitly.
+
+---
 
 ### Phase 5 — Local Privilege Escalation
 **Technique:** T1574.002  
-**Primary Source:** Mandiant UNC2452 Merge [29]
+**Primary Source:** Mandiant — *Assembling the Russian Nesting Doll: UNC2452 Merged into APT29* (April 2022) [29]
 
-DLL sideloading against intentionally vulnerable PolarHealthMonitor service.
-Writable service directory, malicious DLL dropped to ServiceDll path.
-Service runs as LocalSystem.
+Mandiant documented APT29 (UNC2452) modifying "a legitimate Microsoft DLL to enable 
+the DLL Side Loading of a malicious payload" and replacing "a legitimate binary with 
+a malicious file of the same name."
+
+Implemented against an intentionally vulnerable service (PolarHealthMonitor) with a 
+writable service executable directory. Authenticated Users have full control over the 
+directory. Malicious DLL dropped to the path specified in ServiceDll registry key. 
+Service runs as LocalSystem — DLL executes as SYSTEM.
+
+---
 
 ### Phase 6 — Credential Access
 **Techniques:** T1003.001, T1047  
-**Primary Sources:** Mandiant POSHSPY [55], MSTIC Solorigate [37]
+**Primary Source:** Mandiant — *POSHSPY Analysis* (April 2017) [55], MSTIC — *Solorigate* (January 2021) [37]
 
-In-memory LSASS dump via direct syscalls — no Mimikatz binary on disk.
-Output stored in WMI class property (POSHSPY pattern).
-LSA PPL bypass required.
+POSHSPY source code documents APT29 storing Mimikatz output inside a WMI class 
+property (HiveUploadTask property of RacTask class). Mimikatz executed entirely 
+in-memory via WMI. Credentials never touch disk.
+
+LSASS dump attempted against LSA-protected process — requires advanced techniques 
+to bypass RunAsPPL. Output encoded and stored in custom WMI class property.
+
+---
 
 ### Phase 7 — Defense Evasion
 **Techniques:** T1562.002, T1070.006  
-**Primary Sources:** MSTIC Solorigate [37], Mandiant POSHSPY [55]
+**Primary Sources:** MSTIC — *Solorigate* (January 2021) [37], Mandiant — *POSHSPY* (2017) [55]
 
-auditpol disables specific subcategories before sensitive operations.
-Timestomping matches randomly selected System32 file timestamps.
+MSTIC explicitly documented APT29 using auditpol to disable specific audit 
+subcategories before sensitive operations and restoring them afterward.
+
+POSHSPY source code contains timestomping implementation filtering System32 files 
+with LastWriteTime before 01/01/2013. Artifacts timestomped to match randomly 
+selected System32 files.
+
+---
 
 ### Phase 8 — Persistence (Three Layers)
 **Primary Sources:** MSTIC [37], POSHSPY [55], MSTIC GoldMax [10], CrowdStrike StellarParticle [24]
 
-**Layer 1 — Scheduled Task (T1053.005)**
-Path: `\Microsoft\Windows\SoftwareProtectionPlatform\EventCacheManager`
-rundll32 loading .sys-extension DLL from temp path.
+**Layer 1 — Scheduled Task (T1053.005)**  
+MSTIC documented exact task path: `\Microsoft\Windows\SoftwareProtectionPlatform\EventCacheManager`  
+Task executes rundll32 loading a .sys-extension DLL from a temp path.
 
-**Layer 2 — WMI Event Subscription (T1546.003)**
-Filter: `BfeOnServiceStartTypeChange`
-Schedule: Mon/Tue/Thu/Fri/Sat 11:33 AM
-ActiveScriptEventConsumer. Payload encrypted in WMI property.
+**Layer 2 — WMI Event Subscription (T1546.003)**  
+POSHSPY documented exact filter name: `BfeOnServiceStartTypeChange`  
+Schedule: Monday/Tuesday/Thursday/Friday/Saturday at 11:33 AM  
+Advanced from CommandLineEventConsumer (documented) to ActiveScriptEventConsumer 
+for improved evasion. Payload stored encrypted in WMI class property.
 
-**Layer 3 — Sibot (T1112, T1218.005)**
-VBScript in registry, scheduled task calling mshta.exe.
-Task path: `\Microsoft\Windows\WindowsUpdate\sibot`
-
-### Phase 9 — Lateral Movement
-**Techniques:** T1021.006, T1078  
-**Primary Sources:** MSTIC Solorigate [37], CrowdStrike StellarParticle [24]
-
-WinRM PowerShell remoting to DC using stolen Kerberos credentials.
-Separate accounts for recon vs lateral movement (StellarParticle documented).
-Tools transferred via SMB admin share, renamed to match legitimate Windows binaries.
-
-### Phase 10 — Domain Privilege Escalation
-**Technique:** T1003.006  
-**Primary Source:** CrowdStrike StellarParticle [24]
-
-DCSync via in-memory implementation — no Mimikatz binary.
-MS-DRSR replication protocol. No LSASS access on DC.
-Executed via remote WinRM session — no code on DC.
-
-### Phase 11 — Domain Persistence
-**Techniques:** T1558.001, T1136.002  
-**Primary Sources:** MSTIC Solorigate [37], Mandiant confirmed
-
-Golden Ticket from KRBTGT hash + domain SID.
-New domain admin account (polarsvc) — documented APT29 pattern.
-
-### Phase 12 — Cleanup
-**Techniques:** T1070.001, T1070.004, T1562.002  
-**Primary Sources:** Mandiant No Easy Breach [30], MSTIC Solorigate [37]
-
-auditpol restored. Event logs cleared. Tools securely wiped via SDelete.
-WMI persistence removed after objectives met.
+**Layer 3 — Sibot (T1112, T1218.005)**  
+MSTIC GoldMax report documented Sibot exactly — VBScript stored in registry, 
+scheduled task calling mshta.exe to execute it, task at 
+`\Microsoft\Windows\WindowsUpdate\sibot`.
 
 ---
 
-## Post-Ex Toolkit
+### Phase 9 — Lateral Movement
+**Techniques:** T1021.006, T1078  
+**Primary Sources:** MSTIC — *Solorigate* [37], CrowdStrike — *StellarParticle* [24]
 
-**No commercial frameworks. All custom.**
+WinRM PowerShell remoting to DC using stolen Kerberos credentials. MSTIC documented 
+APT29 using WinRM for lateral movement. StellarParticle documented APT29 using 
+separate accounts for reconnaissance vs lateral movement to limit exposure if 
+one account was detected.
 
-| Component | Technique | Status |
-|-----------|-----------|--------|
-| LSASS dumper | Direct syscalls, no binary on disk | 🔴 Planned |
-| DCSync implementation | MS-DRSR in C | 🔴 Planned |
-| POSHSPY 2026 | Original POSHSPY + modern evasion | 🔴 Planned |
-| WMI persistence tool | COM-based, no PowerShell | 🔴 Planned |
-| DLL sideload payload | Custom reflective DLL | 🔴 Planned |
+Temp file replacement technique documented in MSTIC [37] — tools transferred via 
+SMB admin share, renamed to match legitimate Windows binaries.
 
-### POSHSPY 2026
+---
 
-Mandiant published POSHSPY source in 2017 [55]. This project implements a modernized 
-version with 2026 evasion additions:
+### Phase 10 — Domain Privilege Escalation
+**Technique:** T1003.006  
+**Primary Source:** CrowdStrike — *StellarParticle Campaign* (January 2022) [24]
 
-**Original POSHSPY behavior (Mandiant attributed):**
-- WMI class property payload storage
-- WMI event subscription execution
-- Filter name: `BfeOnServiceStartTypeChange`
-- Schedule: Mon/Tue/Thu/Fri/Sat 11:33 AM
+CrowdStrike documented APT29 performing DCSync to extract the KRBTGT hash in the 
+StellarParticle campaign. DCSync via Mimikatz lsadump::dcsync executed in-memory 
+via remote WinRM session. No code executes on DC, no LSASS access — traffic 
+mimics legitimate MS-DRSR replication protocol.
 
-**Novel additions:**
-- Payload AES-encrypted in WMI property (not plaintext)
-- Indirect syscalls for WMI COM calls
-- Sleep masking during execution windows
-- Timestomping on any artifacts
+---
+
+### Phase 11 — Domain Persistence
+**Techniques:** T1558.001, T1136.002  
+**Primary Sources:** MSTIC — *Solorigate* [37], Mandiant confirmed
+
+Golden Ticket forged using KRBTGT hash and domain SID. New domain admin account 
+(polarsvc) created — documented APT29 pattern of creating persistent admin accounts.
+
+---
+
+### Phase 12 — Cleanup
+**Techniques:** T1070.001, T1070.004, T1562.002  
+**Primary Sources:** Mandiant — *No Easy Breach DerbyCon* (2016) [30], MSTIC — *Solorigate* [37]
+
+No Easy Breach documented APT29's meticulous cleanup methodology. MSTIC documented 
+tool removal, log clearing, and use of Microsoft SDelete for secure deletion.
+
+AUDITPOL restored to pre-operation state. Windows event logs cleared (Security, 
+System, PowerShell). All transferred tools securely wiped. WMI persistence removed 
+after operational objectives met.
 
 ---
 
@@ -270,28 +247,127 @@ version with 2026 evasion additions:
 | Process Discovery | T1057 | MSTIC Solorigate [37] |
 | System Information Discovery | T1082 | MSTIC Solorigate [37] |
 | Bypass UAC | T1548.002 | MITRE G0016 |
-| DLL Side-Loading | T1574.002 | Mandiant UNC2452 [29] |
+| DLL Side-Loading | T1574.002 | Mandiant UNC2452 Merge [29] |
 | LSASS Memory | T1003.001 | POSHSPY Mandiant [55] |
-| WMI | T1047 | POSHSPY Mandiant [55] |
-| Disable Event Logging | T1562.002 | MSTIC Solorigate [37] |
+| Windows Management Instrumentation | T1047 | POSHSPY Mandiant [55] |
+| Disable Windows Event Logging | T1562.002 | MSTIC Solorigate [37] |
 | Timestomp | T1070.006 | POSHSPY [55] |
 | Scheduled Task | T1053.005 | MSTIC Solorigate [37] |
 | WMI Event Subscription | T1546.003 | POSHSPY Mandiant [55] |
 | Modify Registry | T1112 | MSTIC GoldMax [10] |
 | Mshta | T1218.005 | MSTIC GoldMax [10] |
-| WinRM | T1021.006 | MSTIC Solorigate [37] |
+| Windows Remote Management | T1021.006 | MSTIC Solorigate [37] |
 | Valid Accounts | T1078 | CrowdStrike StellarParticle [24] |
 | DCSync | T1003.006 | CrowdStrike StellarParticle [24] |
 | Golden Ticket | T1558.001 | MSTIC Solorigate [37] |
 | Create Domain Account | T1136.002 | MSTIC Solorigate [37] |
-| Clear Event Logs | T1070.001 | MSTIC Solorigate [37] |
+| Clear Windows Event Logs | T1070.001 | MSTIC Solorigate [37] |
 | File Deletion | T1070.004 | No Easy Breach [30] |
+
+---
+
+## Evasion Stack
+
+Built using publicly documented open source research, ported to Havoc. All implemented as position-independent code compiled with mingw-w64
+
+| Component | Implementation | Detection Defeated | Source |
+|-----------|---------------|-------------------|----|
+| Sleep masking | Hook Sleep → XOR encrypt all PE sections → RX→RW during sleep → restore on wake. Random 128-byte key per payload | Elastic memory scanner | C5pider — [Ekko](https://github.com/Cracked5pider/Ekko) |
+| Indirect syscalls | RecycledGate — Hell's/Halo's/Tartarus' Gate SSN resolution. Syscall executed from NTDLL .text section | NTDLL userland hooks | thefLink — [RecycledGate](https://github.com/thefLink/RecycledGate) |
+| Call stack spoofing | Draugr — fake BaseThreadInitThunk+0x17 and RtlUserThreadStart+0x2c frames. Gadget from dfshim.dll with preceding call instruction | ETW-TI call stack analysis | mgeeky — [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) + WithSecure research |
+| Static signature removal | XOR-masked DLL delivery, Havoc string replacement | YARA / static AV | Public — [Havoc Binary block](https://github.com/HavocFramework/Havoc/blob/main/WIKI.MD) |
+| RWX elimination | Allocate RW, fix permissions per PE section characteristics | RWX memory alerts | Standard PE loader — Windows Internals |
+| Memory cleanup | Hook ExitThread → timer queue → NtContinue → VirtualFree. CFG bypass via NtSetInformationVirtualMemory | Post-execution forensics | Public NT internals documentation |
+
+---
+
+## APT29 Behavioral Checks
+
+All checks implemented in loader before execution. Loader silently terminates and
+zeroes its own memory if any check fails. Attributed to documented APT29 campaigns.
+
+| Check | Behavior | Attribution |
+|-------|----------|-------------|
+| Domain allowlist | Only execute if joined to `polar.local` — abort otherwise | FireEye SUNBURST [9] |
+| Domain blocklist | Terminate if security vendor domain detected | FireEye SUNBURST [9] |
+| MAC address blocklist | Terminate if sandbox MAC prefix detected (VMware/VBox) | MSTIC GoldMax [10] |
+| Activation delay | 24 hour delay before first execution | FireEye SUNBURST [9] |
+| Working hours | Only execute weekdays 09:00-18:00 UTC+3 (Moscow hours) | MSTIC GoldMax [10] |
+| Decoy traffic | 1-4 WinHTTP GET requests to legitimate domains before beacon | MSTIC GoldMax [10] |
+
+---
+
+## Memory Self-Destruction
+
+On failed behavioral check or clean exit, loader zeroes its own memory.
+Memory forensics finds nothing — no shellcode, no loader artifacts.
+Attributed to FireEye SUNBURST [9] — documented APT29 cleaning own memory on termination.
+
+---
+
+## Sandbox Evasion Validation
+
+Loader submitted to public sandboxes after completion to document behavioral check
+effectiveness. Screenshots and analysis included per submission.
+
+| Sandbox | Result | Triggered By | Evidence |
+|---------|--------|-------------|---------|
+| any.run | 🔴 Pending | | |
+| hybrid-analysis | 🔴 Pending | | |
+| Joe Sandbox | 🔴 Pending | | |
+
+---
+
+## Post-Ex Toolkit
+
+No commercial frameworks. All custom, all open source.
+
+| Component | Technique | Status |
+|-----------|-----------|--------|
+| LSASS dumper | Direct syscalls, no binary on disk | 🔴 Planned |
+| DCSync | MS-DRSR protocol in C, no Mimikatz binary | 🔴 Planned |
+| POSHSPY 2026 | Original POSHSPY + modern evasion additions | 🔴 Planned |
+| WMI persistence | COM-based, no PowerShell touching disk | 🔴 Planned |
+| DLL sideload payload | Custom reflective DLL | 🔴 Planned |
+
+### POSHSPY 2026
+
+Mandiant published POSHSPY source in 2017 [55]. This project builds a modernized
+version with 2026 evasion layered on top of the original documented behavior.
+
+**Original POSHSPY behavior (Mandiant [55] attributed):**
+- WMI class property payload storage (HiveUploadTask / RacTask)
+- WMI event subscription execution
+- Filter name: `BfeOnServiceStartTypeChange`
+- Schedule: Mon/Tue/Thu/Fri/Sat 11:33 AM
+
+**Novel additions:**
+- Payload AES-encrypted in WMI property — not plaintext
+- Indirect syscalls for WMI COM calls
+- Sleep masking during execution windows
+- Timestomping on any artifacts
+
+---
+
+## Primary Sources
+
+| ID | Report | Author | Year | Link |
+|----|--------|--------|------|------|
+| [9][9b] | SUNBURST Backdoor Analysis + Additional Details | FireEye/Mandiant | 2020 | [Link](https://www.mandiant.com/resources/blog/evasive-attacker-leverages-solarwinds-supply-chain-compromises-with-sunburst-backdoor) |
+| [10] | GoldMax, GoldFinder, and Sibot | MSTIC | 2021 | [Link](https://www.microsoft.com/en-us/security/blog/2021/03/04/goldmax-goldfinder-sibot-analyzing-nobelium-multilayered-persistence/) |
+| [18][19] | NOBELIUM EnvyScout toolset | MSTIC | 2021 | [Link](https://www.microsoft.com/en-us/security/blog/2021/05/27/new-sophisticated-email-based-attack-from-nobelium/) |
+| [24] | StellarParticle Campaign | CrowdStrike | 2022 | [Link](https://www.crowdstrike.com/blog/observations-from-the-stellarparticle-campaign/) |
+| [29] | UNC2452 Merged into APT29 | Mandiant | 2022 | [Link](https://cloud.google.com/blog/topics/threat-intelligence/unc2452-merged-into-apt29) |
+| [30] | No Easy Breach DerbyCon | Mandiant | 2016 | [Link](https://www.slideshare.net/MatthewDunwoody1/no-easy-breach-derby-con-2016) |
+| [37] | Deep Dive into Solorigate | MSTIC | 2021 | [Link](https://www.microsoft.com/en-us/security/blog/2021/01/20/deep-dive-into-the-solorigate-second-stage-activation-from-sunburst-to-teardrop-and-raindrop/) |
+| [55] | POSHSPY — APT29 Fileless WMI Backdoor | Mandiant | 2017 | [Link](https://www.mandiant.com/resources/blog/dissecting-one-of-apt29s-fileless-wmi-and-powershell-backdoors) |
+| [62] | Tracking APT29 Phishing Campaigns | Mandiant | 2022 | [Link](https://cloud.google.com/blog/topics/threat-intelligence/tracking-apt29-phishing-campaigns) |
 
 ---
 
 ## Detection Results
 
-*To be populated as engagement progresses.*
+*To be populated as the engagement progresses.*
 
 | Phase | Technique | Elastic Alert | Defender Alert | Bypassed | Notes |
 |-------|-----------|--------------|----------------|---------|-------|
@@ -299,19 +375,15 @@ version with 2026 evasion additions:
 
 ---
 
-## Primary Sources
+## Disclaimer
 
-| ID | Report | Author | Year |
-|----|--------|--------|------|
-| [9] | SUNBURST Backdoor Analysis | FireEye/Mandiant | 2020 |
-| [10] | GoldMax, GoldFinder, Sibot | MSTIC | 2021 |
-| [18][19] | NOBELIUM EnvyScout | MSTIC | 2021 |
-| [24] | StellarParticle Campaign | CrowdStrike | 2022 |
-| [29] | UNC2452 Merged into APT29 | Mandiant | 2022 |
-| [30] | No Easy Breach DerbyCon | Mandiant | 2016 |
-| [37] | Deep Dive into Solorigate | MSTIC | 2021 |
-| [55] | POSHSPY Fileless WMI Backdoor | Mandiant | 2017 |
-| [62] | Tracking APT29 Phishing | Mandiant | 2022 |
+This repository is for authorized security research and defensive education only.
+All techniques were executed against controlled lab infrastructure owned by the author.
+Do not use against systems you do not own or have explicit written authorization to test.
+
+Techniques are attributed to APT29 based on publicly available threat intelligence 
+from FireEye/Mandiant, Microsoft Threat Intelligence Center, CrowdStrike, and 
+government advisories (NCSC, CISA, NSA).
 
 ---
 
@@ -320,7 +392,7 @@ version with 2026 evasion additions:
 | Component | Status |
 |-----------|--------|
 | Lab environment | ✅ Complete |
-| Havoc C2 profile | ✅ Complete |
+| Havoc C2 profile (apt29.yaotl) | ✅ Complete |
 | EnvyScout HTML smuggler | ✅ Complete |
 | Loader — RecycledGate indirect syscalls | ✅ Complete |
 | Loader — Ekko sleep masking | 🔴 In progress |
@@ -335,20 +407,8 @@ version with 2026 evasion additions:
 
 ---
 
-## Disclaimer
-
-This repository is for authorized security research and defensive education only.
-All techniques executed against controlled lab infrastructure owned by the author.
-Do not use against systems you do not own or have explicit written authorization to test.
-
-Techniques attributed to APT29 based on publicly available threat intelligence from
-FireEye/Mandiant, Microsoft Threat Intelligence Center, CrowdStrike, and government
-advisories (NCSC, CISA, NSA).
-
----
-
 ## Author
 
-**61tiger** — Purdue University, BS Cybersecurity
-CRTO | CRTL
+**61tiger** — Purdue University, BS Cybersecurity  
+CRTO | CRTL  
 [GitHub](https://github.com/61tiger) | [LinkedIn](https://linkedin.com/in/aryan-cybersecurity)
