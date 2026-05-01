@@ -6,8 +6,7 @@ Version : 1.0
 
 PURPOSE
 -------
-Generates a complete EnvyScout-style HTML smuggler (NV.html) for the
-cozy-bear-emulation adversary emulation engagement against polar.local.
+Generates a complete EnvyScout-style HTML smuggler (NV.html).
 
 The HTML dropper implements all four documented EnvyScout components
 attributed to NOBELIUM (APT29) by MSTIC:
