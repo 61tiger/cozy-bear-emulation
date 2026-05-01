@@ -12,7 +12,7 @@ This repository documents a complete APT29 adversary emulation executed against 
 controlled Active Directory lab environment with modern enterprise defenses enabled.
 
 Every technique in the kill chain is directly attributed to a named, publicly 
-documented APT29 campaign reports. Where MITRE is the only available attribution, this is explicitly noted.
+documented APT29 campaign report. Where MITRE is the only available attribution, this is explicitly noted.
 
 The emulation advances documented APT29 tradecraft to account for 2026 defensive 
 capabilities — specifically Elastic Security 9.3 in full block/prevent mode, 
@@ -30,9 +30,6 @@ research with full primary source attribution.
 ---
 
 ## Defensive Environment
-
-This emulation runs against hardened infrastructure — not a default lab. 
-Defenses active during the engagement:
 
 | Defense | Configuration |
 |---------|--------------|
@@ -78,6 +75,7 @@ Every phase cites the specific report where APT29 was documented using this tech
 EnvyScout HTML smuggler delivered via spearphishing. The HTML file contains a 
 XOR-encoded ISO file decoded and auto-downloaded by JavaScript using FileSaver.js. 
 ISO mounts automatically on Windows 10+. ISO contains an LNK file executing a compiled binary stager that establishes the Havoc beacon.
+
 Note: PowerShell CLM is enforced on VICTIM01 — PS-based stagers are not viable against the target environment.
 
 MSTIC documented this exact delivery chain — NV.html, FileSaver.js, ISO delivery, 
@@ -88,6 +86,8 @@ Additional documented NOBELIUM behaviors implemented:
 - C: drive check to avoid sandbox execution
 - iOS user-agent redirect to benign content
 - NTLMv2 capture via file:// URI
+
+**Current implementation:** EXE-based (disk artifact). DLL/fileless variant in progress.
 
 ---
 
@@ -100,7 +100,7 @@ Custom Havoc C2 profile implementing documented NOBELIUM behavioral parameters:
 - **Active hours:** Weekdays only, 09:00-18:00 UTC+3 (Moscow business hours)
 - **Activation delay:** 24 hours before first beacon (SUNBURST: 12-14 days)
 - **Decoy traffic:** Legitimate-looking requests mixed with real C2 (GoldMax documented)
-- **Anti-sandbox:** MAC address check — terminates on c8:27:cc:c2:37:5a (GoldMax documented)
+- **Anti-sandbox:** MAC address check — terminates on known sandbox OUI prefixes (GoldMax documented)
 - **Content-Type:** application/json for tasking, application/octet-stream for exfil (SUNBURST documented)
 - **URIs:** Mimic PolarWinds internal service endpoints
 
@@ -268,16 +268,17 @@ after operational objectives met.
 
 ## Evasion Stack
 
-Built using publicly documented open source research, ported to Havoc. All implemented as position-independent code compiled with mingw-w64
+Built using publicly documented open source research, ported to Havoc. All implemented as position-independent code compiled with mingw-w64.
 
 | Component | Implementation | Detection Defeated | Source |
 |-----------|---------------|-------------------|----|
-| Sleep masking | Hook Sleep → XOR encrypt all PE sections → RX→RW during sleep → restore on wake. Random 128-byte key per payload | Elastic memory scanner | C5pider — [Ekko](https://github.com/Cracked5pider/Ekko) |
-| Indirect syscalls | RecycledGate — Hell's/Halo's/Tartarus' Gate SSN resolution. Syscall executed from NTDLL .text section | NTDLL userland hooks | thefLink — [RecycledGate](https://github.com/thefLink/RecycledGate) |
+| Sleep masking | Hook Sleep → RC4 encrypt beacon memory → RX→RW during sleep → restore on wake. Random key per sleep cycle via xorshift RNG | Elastic memory scanner | C5pider — [Ekko](https://github.com/Cracked5pider/Ekko) |
+| Indirect syscalls | RecycledGate — Hell's/Halo's Gate SSN resolution. Syscall executed from NTDLL .text section | NTDLL userland hooks | thefLink — [RecycledGate](https://github.com/thefLink/RecycledGate) |
 | Call stack spoofing | Draugr — fake BaseThreadInitThunk+0x17 and RtlUserThreadStart+0x2c frames. Gadget from dfshim.dll with preceding call instruction | ETW-TI call stack analysis | mgeeky — [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) + WithSecure research |
-| Static signature removal | XOR-masked DLL delivery, Havoc string replacement | YARA / static AV | Public — [Havoc Binary block](https://github.com/HavocFramework/Havoc/blob/main/WIKI.MD) |
-| RWX elimination | Allocate RW, fix permissions per PE section characteristics | RWX memory alerts | Standard PE loader — Windows Internals |
-| Memory cleanup | Hook ExitThread → timer queue → NtContinue → VirtualFree. CFG bypass via NtSetInformationVirtualMemory | Post-execution forensics | Public NT internals documentation |
+| Static signature removal | XOR-masked payload delivery, Havoc string replacement | YARA / static AV | Public — [Havoc Binary block](https://github.com/HavocFramework/Havoc/blob/main/WIKI.MD) |
+| RWX elimination | Allocate RW → copy + decrypt shellcode → flip RX via indirect syscall | RWX memory alerts | Standard PE loader — Windows Internals |
+| Memory cleanup | Loader zeroes shellcode buffer on exit. RtlExitUserProcess — exit code 0 | Post-execution forensics | FireEye SUNBURST [9] |
+| CRT elimination | No windows.h, no stdlib. All types manual. strcmp replaced with my_strcmp. memcpy replaced with byte loop | Import table analysis | Standard OPSEC practice |
 
 ---
 
@@ -290,7 +291,7 @@ zeroes its own memory if any check fails. Attributed to documented APT29 campaig
 |-------|----------|-------------|
 | Domain allowlist | Only execute if joined to `polar.local` — abort otherwise | FireEye SUNBURST [9] |
 | Domain blocklist | Terminate if security vendor domain detected | FireEye SUNBURST [9] |
-| MAC address blocklist | Terminate if sandbox MAC prefix detected (VMware/VBox) | MSTIC GoldMax [10] |
+| MAC address blocklist | Terminate if sandbox MAC OUI prefix detected (VMware/VBox/Hyper-V/KVM/Docker/AWS/GCP) | MSTIC GoldMax [10] |
 | Activation delay | 24 hour delay before first execution | FireEye SUNBURST [9] |
 | Working hours | Only execute weekdays 09:00-18:00 UTC+3 (Moscow hours) | MSTIC GoldMax [10] |
 | Decoy traffic | 1-4 WinHTTP GET requests to legitimate domains before beacon | MSTIC GoldMax [10] |
@@ -305,10 +306,35 @@ Attributed to FireEye SUNBURST [9] — documented APT29 cleaning own memory on t
 
 ---
 
+## POSHSPY 2026
+
+Mandiant published POSHSPY source in 2017 [55]. This project builds the missing server-side component and a modernized client with 2026 evasion layered on top.
+
+**Status:** Skeleton public. Protocol implementation complete and validated. End-to-end testing and Elastic evasion integration in progress.
+
+**What's implemented:**
+- `crypto.py` — full VC class reimplementation: AES-CBC, RSA PKCS1v1.5, PKI encrypt/decrypt/sign/verify, file signature masking
+- `protocol.py` — auth token handshake, 2048-byte chunked upload, ACK cookie generation
+- `dga.py` — .NET System.Random reimplemented in Python, deterministic URL generation matching PS1 output exactly
+- `server.py` — Flask C2 server: decoy GET, auth token issuance, payload delivery, chunk reassembly
+
+**Original POSHSPY behavior preserved (Mandiant [55]):**
+- WMI class property payload storage (HiveUploadTask / RacTask)
+- WMI event subscription execution
+- Filter name: `BfeOnServiceStartTypeChange`
+- Schedule: Mon/Tue/Thu/Fri/Sat 11:33 AM
+
+**Novel 2026 additions:**
+- Payload AES-encrypted in WMI property — not plaintext
+- Indirect syscalls for WMI COM calls
+- Sleep masking during execution windows
+- Timestomping on any artifacts
+
+---
+
 ## Sandbox Evasion Validation
 
-Loader submitted to public sandboxes after completion to document behavioral check
-effectiveness. Screenshots and analysis included per submission.
+Loader submitted to public sandboxes after completion to document behavioral check effectiveness.
 
 | Sandbox | Result | Triggered By | Evidence |
 |---------|--------|-------------|---------|
@@ -318,34 +344,13 @@ effectiveness. Screenshots and analysis included per submission.
 
 ---
 
-## Post-Ex Toolkit
+## Detection Results
 
-No commercial frameworks. All custom, all open source.
-
-| Component | Technique | Status |
-|-----------|-----------|--------|
-| LSASS dumper | Direct syscalls, no binary on disk | 🔴 Planned |
-| DCSync | MS-DRSR protocol in C, no Mimikatz binary | 🔴 Planned |
-| POSHSPY 2026 | Original POSHSPY + modern evasion additions | 🔴 Planned |
-| WMI persistence | COM-based, no PowerShell touching disk | 🔴 Planned |
-| DLL sideload payload | Custom reflective DLL | 🔴 Planned |
-
-### POSHSPY 2026
-
-Mandiant published POSHSPY source in 2017 [55]. This project builds a modernized
-version with 2026 evasion layered on top of the original documented behavior.
-
-**Original POSHSPY behavior (Mandiant [55] attributed):**
-- WMI class property payload storage (HiveUploadTask / RacTask)
-- WMI event subscription execution
-- Filter name: `BfeOnServiceStartTypeChange`
-- Schedule: Mon/Tue/Thu/Fri/Sat 11:33 AM
-
-**Novel additions:**
-- Payload AES-encrypted in WMI property — not plaintext
-- Indirect syscalls for WMI COM calls
-- Sleep masking during execution windows
-- Timestomping on any artifacts
+| Phase | Technique | Elastic Alert | Defender Alert | Bypassed | Notes |
+|-------|-----------|--------------|----------------|---------|-------|
+| Initial Access | HTML Smuggling T1027.006 | 🔴 Pending | ✅ None | ✅ | ISO drops, mounts, LNK executes — 0 Defender alerts |
+| Persistence | WMI Event Subscription T1546.003 | 🔴 Pending | ✅ None | ✅ | BfeOnServiceStartTypeChange — no alert on creation or persistence |
+| Execution | Loader — indirect syscalls + Ekko sleep mask | 🔴 Pending | ✅ None | ✅ | 0 detections confirmed on latest Defender |
 
 ---
 
@@ -365,13 +370,34 @@ version with 2026 evasion layered on top of the original documented behavior.
 
 ---
 
-## Detection Results
+## Status
 
-*To be populated as the engagement progresses.*
+| Component | Status |
+|-----------|--------|
+| Lab environment | ✅ Complete |
+| Havoc C2 profile (apt29.yaotl) | ✅ Complete |
+| EnvyScout HTML smuggler generator | ✅ Complete — EXE-based, DLL/fileless in progress |
+| Loader — RecycledGate indirect syscalls | ✅ Complete |
+| Loader — Ekko sleep masking | ✅ Complete |
+| Loader — APT29 behavioral checks | ✅ Complete |
+| Loader — Memory self-destruction | ✅ Complete |
+| Loader — Draugr call stack spoofing | 🔴 Pending |
+| POSHSPY 2026 server skeleton | 🟡 Public — testing in progress |
+| Sandbox evasion validation | 🔴 Pending |
+| Full kill chain execution | 🔴 Pending |
+| Detection results table | 🟡 Partial — Defender results in, Elastic pending |
 
-| Phase | Technique | Elastic Alert | Defender Alert | Bypassed | Notes |
-|-------|-----------|--------------|----------------|---------|-------|
-| | | | | | |
+---
+
+## AI Assistance Disclosure
+
+Claude (Anthropic) was used in the development of this project to:
+- Beautify and format code for readability
+- Structure and format this README
+- Aggregate primary source references into a single attribution table
+- Debug implementation issues during development
+
+All techniques, primary source attributions, tool design decisions, and security research are the author's own work.
 
 ---
 
@@ -384,26 +410,6 @@ Do not use against systems you do not own or have explicit written authorization
 Techniques are attributed to APT29 based on publicly available threat intelligence 
 from FireEye/Mandiant, Microsoft Threat Intelligence Center, CrowdStrike, and 
 government advisories (NCSC, CISA, NSA).
-
----
-
-## Status
-
-| Component | Status |
-|-----------|--------|
-| Lab environment | ✅ Complete |
-| Havoc C2 profile (apt29.yaotl) | ✅ Complete |
-| EnvyScout HTML smuggler | ✅ Complete |
-| Loader — RecycledGate indirect syscalls | ✅ Complete |
-| Loader — Ekko sleep masking | 🔴 In progress |
-| Loader — Draugr call stack spoofing | 🔴 Pending |
-| Loader — APT29 behavioral checks | 🔴 Pending |
-| Loader — Memory self-destruction | 🔴 Pending |
-| Sandbox evasion validation | 🔴 Pending loader completion |
-| POSHSPY 2026 | 🔴 Planned |
-| Post-ex toolkit | 🔴 Planned |
-| Full kill chain execution | 🔴 Pending loader completion |
-| Detection results table | 🔴 Pending engagement execution |
 
 ---
 
