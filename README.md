@@ -4,6 +4,19 @@
 > Active Directory environment. Every technique attributed to a named primary source report.
 > Operational goal: zero Elastic EDR detections in block/prevent mode.
 
+## Special Thanks
+
+| Project | Author | Used For |
+|---------|--------|---------|
+| [Ekko](https://github.com/Cracked5pider/Ekko) | C5pider | Sleep masking implementation |
+| [RecycledGate](https://github.com/thefLink/RecycledGate) | thefLink | Indirect syscall SSN resolution |
+| [HellsGate](https://github.com/am0nsec/HellsGate) | am0nsec | Hell's Gate SSN resolution reference |
+| [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) | mgeeky | Call stack spoofing research |
+| [Havoc](https://github.com/HavocFramework/Havoc) | C5pider | C2 framework |
+| [POSHSPY](https://github.com/matthewdunwoody/POSHSPY) | Matthew Dunwoody / Mandiant | Original POSHSPY PS1 source |
+
+This project builds on the shoulders of public offensive security research. All implementations are cited inline in source code.
+
 ---
 
 ## Overview
