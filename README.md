@@ -23,9 +23,8 @@ Mode, and AES-only Kerberos with NTLM disabled.
 SVR's documented targeting pattern includes think tanks, diplomatic entities, and 
 policy organizations of exactly this type.
 
-**No commercial post-ex frameworks used.** Crystal Palace, Cobalt Strike plugins, and 
-commercial tooling are explicitly excluded. Every component is built from open source 
-research with full primary source attribution.
+**Every component is built from open source 
+research with full primary source attribution.**
 
 ---
 
